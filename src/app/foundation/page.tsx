@@ -1,4 +1,4 @@
-export const metadata = { title: "CareCircle  Foundation" };
+﻿export const metadata = { title: "CareCircle  Foundation" };
 
 export default function Foundation() {
   return (

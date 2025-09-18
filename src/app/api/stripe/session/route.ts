@@ -1,11 +1,11 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+﻿export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+import { NextResponse } from 'next/server';import Stripe from 'stripe';
 import "server-only";
 import { stripe } from "@/lib/stripe";
-
-export const dynamic = "force-dynamic";
-
 // GET /api/stripe/session?id=cs_test_...
-export async function GET(req: NextRequest) {
+export async function GET(req: Request) {
+  if (!stripe) return NextResponse.json({ error: 'Stripe not configured' }, { status: 500 });
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
@@ -25,5 +25,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST() {
+  if (!stripe) return NextResponse.json({ error: 'Stripe not configured' }, { status: 500 });
   return NextResponse.json({ error: "Method Not Allowed" }, { status: 405 });
 }
+
+
+
+
+

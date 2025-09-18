@@ -1,29 +1,13 @@
-﻿// src/app/layout.tsx
-import type { Metadata, Viewport } from "next";
-import "./globals.css"; // keep global styles
-
-export const metadata: Metadata = {
-  title: "CareCircle",
-  description: "Coordinate care with confidence",
+﻿import "./globals.css";
+export const metadata = {
+  title: "CareCircle  Coordinate care with confidence",
+  description:
+    "Shared calendar, medication reminders, geofencing alerts, and secure chat for families and caregivers."
 };
-
-export const viewport: Viewport = {
-  width: "device-width",
-  initialScale: 1,
-  maximumScale: 1,
-  viewportFit: "cover",
-};
-
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="h-full">
-      <body className="min-h-dvh antialiased bg-white text-slate-900">
-        {children}
-      </body>
+    <html lang="en">
+      <body>{children}</body>
     </html>
   );
 }

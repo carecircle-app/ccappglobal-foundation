@@ -3,14 +3,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 /**
- * CareCircle Admin (ESLint-friendly)
- * - Local Kids roster (max 5) with name/IP/port/phones; mapped to API Child users
- * - Plan gating: Free(1) / Lite(2) / Elite(∞)
- * - Task templates, recurrence (none/daily/weekly), ack/photo-proof, per-kid auto-enforce hints
- * - Parental enforce actions (signal to backend)
- * - Tasks table with ACK
- *
- * API base: process.env.NEXT_PUBLIC_API_URL || http://127.0.0.1:4000
+ * Kids Admin — Phone-first
+ * - Local kids manager (up to 5), plan limits, task creator, enforce actions
+ * - Acting user drives the `x-user-id` header for API calls
+ * - “Acting name” is a simple remembered text with a datalist
  */
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:4000';
@@ -43,7 +39,6 @@ function nextAtDaily(hour: number, minute: number) {
   return d.getTime();
 }
 function nextAtWeekly(dow: number, hour: number, minute: number) {
-  // 0=Sun..6=Sat
   const now = new Date();
   const d = new Date();
   d.setHours(hour, minute, 0, 0);
@@ -55,12 +50,7 @@ function nextAtWeekly(dow: number, hour: number, minute: number) {
 
 /* ----------------------------- Types ----------------------------- */
 type Role = 'Owner' | 'Family' | 'Child' | 'Minor' | 'Caregiver' | 'Relative';
-
-type User = {
-  id: string;
-  name: string;
-  role: Role;
-};
+type User = { id: string; name: string; role: Role };
 
 type Task = {
   id: string;
@@ -110,10 +100,16 @@ type LocalKid = {
   autoAction?: ActionV;
 };
 
+type KidStatus = 'not_started' | 'in_progress' | 'almost_done' | 'done' | 'skipped';
+
 /* ------------------------ Local Storage Keys ------------------------ */
 const LSK_KIDS = 'admin.localKids.v2';
 const LSK_OWNER = 'admin.ownerLabel.v1';
 const LSK_PLAN = 'admin.plan.v1';
+const LSK_TASK_NOTES = 'admin.taskNotes.v1';
+const LSK_OWNER_NOTES = 'admin.ownerNotes.v1';
+const LSK_LOCAL_PHONE_TASKS = 'admin.localPhoneTasks.v1';
+const LSK_NAME_BOOK = 'admin.nameBook.v1';
 
 /* ---------------------------- Constants ---------------------------- */
 const TEMPLATES = [
@@ -138,9 +134,12 @@ const ACTIONS: ReadonlyArray<{ v: ActionV; label: string }> = [
 
 /* ============================ Component ============================ */
 export default function AdminPage() {
-  /* -------- Acting User (header auth) -------- */
-  const [acting, setActing] = useState<string>('u-owner');
-  const headers = useMemo(() => ({ 'x-user-id': acting }), [acting]);
+  /* -------- Core state that's referenced by hooks below -------- */
+  const [actingUser, setActingUser] = useState<string>('u-owner');
+  const [actingName, setActingName] = useState<string>('');
+
+  /* Build headers based on actingUser */
+  const headers = useMemo(() => ({ 'x-user-id': actingUser }), [actingUser]);
 
   /* -------- API data -------- */
   const [users, setUsers] = useState<User[]>([]);
@@ -154,46 +153,84 @@ export default function AdminPage() {
   const [plan, setPlan] = useState<PlanKey>('elite');
   const maxKids = PLAN_LIMITS[plan];
 
-  /* -------- Local kids (browser only) -------- */
+  /* -------- Local kids / previews / memory -------- */
   const [kids, setKids] = useState<LocalKid[]>([]);
+  const [activeKidId, setActiveKidId] = useState<string | null>(null);
+  const [autoSelectActive, setAutoSelectActive] = useState<boolean>(true);
+
+  const [taskNotes, setTaskNotes] = useState<Record<string, { status: KidStatus; comment?: string }>>({});
+  const [ownerNotes, setOwnerNotes] = useState<Record<string, { preset?: string; comment?: string }>>({});
+  const [phoneTasks, setPhoneTasks] = useState<Record<string, Array<{ id: string; title: string; due?: number }>>>({});
+  const [nameBook, setNameBook] = useState<string[]>([]);
+
+  /* -------- Load from localStorage -------- */
   useEffect(() => {
     try {
-      const rawKids = typeof window !== 'undefined' ? localStorage.getItem(LSK_KIDS) : null;
-      if (rawKids) setKids(JSON.parse(rawKids) as LocalKid[]);
-      const rawOwner = typeof window !== 'undefined' ? localStorage.getItem(LSK_OWNER) : null;
-      if (rawOwner) setOwnerLabel(rawOwner);
-      const rawPlan = (typeof window !== 'undefined'
-        ? (localStorage.getItem(LSK_PLAN) as PlanKey | null)
-        : null) as PlanKey | null;
-      if (rawPlan) setPlan(rawPlan);
+      const rk = typeof window !== 'undefined' ? localStorage.getItem(LSK_KIDS) : null;
+      if (rk) setKids(JSON.parse(rk) as LocalKid[]);
+      const ro = typeof window !== 'undefined' ? localStorage.getItem(LSK_OWNER) : null;
+      if (ro) setOwnerLabel(ro);
+      const rp = (typeof window !== 'undefined' ? localStorage.getItem(LSK_PLAN) : null) as PlanKey | null;
+      if (rp) setPlan(rp);
+      const rn = typeof window !== 'undefined' ? localStorage.getItem(LSK_TASK_NOTES) : null;
+      if (rn) setTaskNotes(JSON.parse(rn));
+      const ron = typeof window !== 'undefined' ? localStorage.getItem(LSK_OWNER_NOTES) : null;
+      if (ron) setOwnerNotes(JSON.parse(ron));
+      const rph = typeof window !== 'undefined' ? localStorage.getItem(LSK_LOCAL_PHONE_TASKS) : null;
+      if (rph) setPhoneTasks(JSON.parse(rph));
+      const rnb = typeof window !== 'undefined' ? localStorage.getItem(LSK_NAME_BOOK) : null;
+      if (rnb) setNameBook(JSON.parse(rnb));
     } catch {
       /* ignore */
     }
   }, []);
+
+  /* -------- Persisters -------- */
   const persistKids = useCallback((next: LocalKid[]) => {
     setKids(next);
     try {
-      if (typeof window !== 'undefined') localStorage.setItem(LSK_KIDS, JSON.stringify(next));
-    } catch {
-      /* ignore */
-    }
+      localStorage.setItem(LSK_KIDS, JSON.stringify(next));
+    } catch {}
   }, []);
   const persistOwner = useCallback((label: string) => {
     setOwnerLabel(label);
     try {
-      if (typeof window !== 'undefined') localStorage.setItem(LSK_OWNER, label);
-    } catch {
-      /* ignore */
-    }
+      localStorage.setItem(LSK_OWNER, label);
+    } catch {}
   }, []);
   const persistPlan = useCallback((p: PlanKey) => {
     setPlan(p);
     try {
-      if (typeof window !== 'undefined') localStorage.setItem(LSK_PLAN, p);
-    } catch {
-      /* ignore */
-    }
+      localStorage.setItem(LSK_PLAN, p);
+    } catch {}
   }, []);
+  const persistTaskNotes = useCallback(
+    (next: typeof taskNotes) => {
+      setTaskNotes(next);
+      try {
+        localStorage.setItem(LSK_TASK_NOTES, JSON.stringify(next));
+      } catch {}
+    },
+    [taskNotes],
+  );
+  const persistOwnerNotes = useCallback(
+    (next: typeof ownerNotes) => {
+      setOwnerNotes(next);
+      try {
+        localStorage.setItem(LSK_OWNER_NOTES, JSON.stringify(next));
+      } catch {}
+    },
+    [ownerNotes],
+  );
+  const persistPhoneTasks = useCallback(
+    (next: typeof phoneTasks) => {
+      setPhoneTasks(next);
+      try {
+        localStorage.setItem(LSK_LOCAL_PHONE_TASKS, JSON.stringify(next));
+      } catch {}
+    },
+    [phoneTasks],
+  );
 
   /* -------- Task creation state -------- */
   const [template, setTemplate] = useState<string>('');
@@ -209,6 +246,11 @@ export default function AdminPage() {
   const [autoEnforce, setAutoEnforce] = useState<boolean>(true);
   const [busy, setBusy] = useState<boolean>(false);
   const [err, setErr] = useState<string>('');
+
+  /* -------- Auto select the active kid -------- */
+  useEffect(() => {
+    if (autoSelectActive && activeKidId) setSelectedKidIds([activeKidId]);
+  }, [autoSelectActive, activeKidId]);
 
   const resetForm = useCallback(() => {
     setTemplate('');
@@ -226,21 +268,20 @@ export default function AdminPage() {
 
   const toggleKid = useCallback(
     (id: string) => {
+      if (autoSelectActive) {
+        setActiveKidId(id);
+        return;
+      }
       setSelectedKidIds((prev) => {
         if (prev.includes(id)) return prev.filter((x) => x !== id);
         if (prev.length >= maxKids) {
-          // eslint-disable-next-line no-alert
-          alert(
-            `Your plan (${plan}) allows up to ${
-              maxKids === 999 ? 'unlimited' : maxKids
-            } child${maxKids > 1 ? 'ren' : ''}.`,
-          );
+          alert(`Your plan (${plan}) allows up to ${maxKids === 999 ? 'unlimited' : maxKids} child${maxKids > 1 ? 'ren' : ''}.`);
           return prev;
         }
         return [...prev, id];
       });
     },
-    [maxKids, plan],
+    [autoSelectActive, maxKids, plan],
   );
 
   /* -------- Load API data -------- */
@@ -260,23 +301,36 @@ export default function AdminPage() {
 
   useEffect(() => {
     void loadAll();
-  }, [acting, loadAll]);
+  }, [actingUser, loadAll]);
 
-  /* -------- Create minor tasks (one per selected kid) -------- */
+  /* -------- Plan auto-lock from API (optional) -------- */
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetchJSON<{ plan: PlanKey }>(`${API_BASE}/api/plan`, { headers });
+        if (res?.plan && (['free', 'lite', 'elite'] as PlanKey[]).includes(res.plan)) {
+          persistPlan(res.plan);
+        }
+      } catch {
+        /* ignore if not available */
+      }
+    })();
+  }, [headers, persistPlan]);
+
+  /* -------- Create minor tasks -------- */
   const createMinorTasks = useCallback(async () => {
     if (!title.trim()) {
-      // eslint-disable-next-line no-alert
       alert('Title is required.');
       return;
     }
-    if (selectedKidIds.length === 0) {
-      // eslint-disable-next-line no-alert
+    const useIds = autoSelectActive && activeKidId ? [activeKidId] : selectedKidIds;
+    if (useIds.length === 0) {
       alert('Select at least one child.');
       return;
     }
+
     const apiChildren = users.filter((u) => u.role === 'Child' || u.role === 'Minor');
     if (apiChildren.length === 0) {
-      // eslint-disable-next-line no-alert
       alert("No API 'Child' users found. Add at least one child user to the circle first.");
       return;
     }
@@ -288,7 +342,7 @@ export default function AdminPage() {
       const { h, m } = parseTimeHHMM(timeHHMM);
       const requests: Array<Promise<unknown>> = [];
 
-      for (const localId of selectedKidIds) {
+      for (const localId of useIds) {
         const kid = kids.find((k) => k.id === localId);
         const apiUserId = kid?.apiUserId || defaultChildId;
         if (!apiUserId) continue;
@@ -317,13 +371,11 @@ export default function AdminPage() {
         );
       }
       await Promise.all(requests);
-      // eslint-disable-next-line no-alert
-      alert(`Created ${selectedKidIds.length} task(s) ✅`);
+      alert(`Created ${useIds.length} task(s) ✅`);
       await loadAll();
       resetForm();
     } catch (e) {
       setErr((e as Error).message || 'Create failed');
-      // eslint-disable-next-line no-alert
       alert(`Create failed: ${(e as Error).message}`);
     } finally {
       setBusy(false);
@@ -343,9 +395,11 @@ export default function AdminPage() {
     title,
     users,
     weeklyDOW,
+    autoSelectActive,
+    activeKidId,
   ]);
 
-  /* -------- Task ACK -------- */
+  /* -------- ACK -------- */
   const ackTask = useCallback(
     async (id: string) => {
       setErr('');
@@ -354,14 +408,13 @@ export default function AdminPage() {
         await loadAll();
       } catch (e) {
         setErr((e as Error).message || 'ACK failed');
-        // eslint-disable-next-line no-alert
         alert(`ACK failed: ${(e as Error).message}`);
       }
     },
     [headers, loadAll],
   );
 
-  /* -------- Parental enforce -------- */
+  /* -------- Enforce -------- */
   const enforce = useCallback(
     async (apiUserId: string, action: ActionV, reason: string) => {
       setErr('');
@@ -371,36 +424,36 @@ export default function AdminPage() {
           headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify({ targetUserId: apiUserId, action, reason }),
         });
-        // eslint-disable-next-line no-alert
         alert(`Enforce sent: ${action} ✅`);
       } catch (e) {
         setErr((e as Error).message || 'Enforce failed');
-        // eslint-disable-next-line no-alert
         alert(`Enforce failed: ${(e as Error).message}`);
       }
     },
     [headers],
   );
 
-  /* -------- Local kids helpers -------- */
+  /* -------- Kids helpers -------- */
   const addKid = useCallback(() => {
     if (kids.length >= 5) {
-      // eslint-disable-next-line no-alert
       alert('You can keep up to 5 local kids.');
       return;
     }
     const id = `k-${Math.random().toString(36).slice(2, 8)}`;
     const next: LocalKid[] = [...kids, { id, name: 'New child', phones: [] }];
     persistKids(next);
-  }, [kids, persistKids]);
+    setActiveKidId(id);
+    if (autoSelectActive) setSelectedKidIds([id]);
+  }, [kids, persistKids, autoSelectActive]);
 
   const removeKid = useCallback(
     (id: string) => {
       const next = kids.filter((k) => k.id !== id);
       persistKids(next);
       setSelectedKidIds((prev) => prev.filter((x) => x !== id));
+      if (activeKidId === id) setActiveKidId(next[0]?.id ?? null);
     },
-    [kids, persistKids],
+    [kids, persistKids, activeKidId],
   );
 
   const updateKid = useCallback(
@@ -441,93 +494,164 @@ export default function AdminPage() {
     [kids, updateKid],
   );
 
+  /* ------------------------------ UI ------------------------------ */
   return (
-    <div className="min-h-dvh space-y-8 p-6">
+    <div className="min-h-dvh space-y-6 p-4 md:p-6">
       {/* Header */}
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold">Admin</h1>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-600">Household / Owner</span>
+      <header className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl md:text-2xl font-semibold">Kids Admin</h1>
+          <div className="hidden sm:flex items-center gap-2">
+            <span className="text-xs text-gray-600">Household</span>
             <input
-              className="rounded border px-2 py-1"
+              className="rounded border px-2 py-1 text-sm"
               placeholder="e.g. Mom & Dad"
               value={ownerLabel}
               onChange={(e) => persistOwner(e.target.value)}
             />
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm text-gray-600">Acting user</span>
-          <select
-            className="rounded border px-2 py-1"
-            value={acting}
-            onChange={(e) => setActing(e.target.value)}
-          >
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name} ({u.role})
-              </option>
-            ))}
-            {users.length === 0 && (
-              <>
-                <option value="u-owner">Owner (Owner)</option>
-                <option value="u-child">Derek (Child)</option>
-                <option value="u-fam">Ryan (Family)</option>
-              </>
-            )}
-          </select>
-          <button className="ml-2 rounded border px-3 py-1" onClick={() => void loadAll()}>
-            Refresh
+        <div className="flex items-center gap-2">
+          <button className="rounded border px-2 py-1 text-sm" onClick={() => (window.location.href = '/')}>
+            Home
+          </button>
+          <button className="rounded border px-2 py-1 text-sm" onClick={() => window.location.reload()}>
+            Reload
           </button>
         </div>
       </header>
 
-      {err && (
-        <div className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
-          {err}
-        </div>
-      )}
+      {/* Acting + Refresh + Acting name */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs text-gray-600">Acting</span>
+        <select
+          className="rounded border px-2 py-1 text-sm"
+          value={actingUser}
+          onChange={(e) => {
+            const id = e.target.value;
+            setActingUser(id);
+            const sel = users.find((u) => u.id === id);
+            const label = sel?.name || '';
+            if (label) {
+              setActingName(label);
+              const tgt = activeKidId || kids[0]?.id;
+              if (tgt) {
+                updateKid(tgt, { name: label });
+                setActiveKidId(tgt);
+              }
+              if (label && !nameBook.includes(label)) {
+                const next = [...nameBook, label];
+                setNameBook(next);
+                try {
+                  localStorage.setItem(LSK_NAME_BOOK, JSON.stringify(next));
+                } catch {}
+              }
+            }
+          }}
+        >
+          {users.length === 0 && (
+            <option value="" disabled>
+              {kids?.length ? 'Select user/kid' : 'Add a kid below to begin'}
+            </option>
+          )}
+          {users.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.name} ({u.role})
+            </option>
+          ))}
+        </select>
+
+        <button className="rounded border px-2 py-1 text-sm" onClick={() => void loadAll()}>
+          Refresh Data
+        </button>
+
+        <label className="flex items-center gap-2 text-sm">
+          <span>Acting name</span>
+          <input
+            className="rounded border px-2 py-1 text-sm"
+            list="name-book"
+            value={actingName}
+            onChange={(e) => {
+              setActingName(e.target.value);
+              const tgt = activeKidId || kids[0]?.id;
+              if (tgt) {
+                updateKid(tgt, { name: e.target.value });
+                setActiveKidId(tgt);
+              }
+            }}
+            placeholder="type a name"
+          />
+          <datalist id="name-book">{nameBook.map((n) => <option key={n} value={n} />)}</datalist>
+          <button
+            className="rounded border px-2 py-1 text-sm"
+            onClick={() => {
+              if (actingName && !nameBook.includes(actingName)) {
+                const next = [...nameBook, actingName];
+                setNameBook(next);
+                try {
+                  localStorage.setItem(LSK_NAME_BOOK, JSON.stringify(next));
+                } catch {}
+              }
+            }}
+          >
+            Save
+          </button>
+        </label>
+      </div>
+
+      {err && <div className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">{err}</div>}
 
       {/* Plan gating */}
-      <section className="grid gap-2 rounded border p-4">
-        <div className="flex items-center gap-3">
+      <section className="grid gap-2 rounded border p-3">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm text-gray-600">Plan</span>
-          <select
-            className="rounded border px-2 py-1"
-            value={plan}
-            onChange={(e) => persistPlan(e.target.value as PlanKey)}
-          >
+          <select className="rounded border px-2 py-1 text-sm" value={plan} onChange={(e) => persistPlan(e.target.value as PlanKey)}>
             <option value="free">Free (1 child)</option>
             <option value="lite">Lite (2 children)</option>
             <option value="elite">Elite (unlimited)</option>
           </select>
-          <span className="text-xs text-gray-500">
-            Max assignees per task: {maxKids === 999 ? 'unlimited' : maxKids}
-          </span>
+          <span className="text-xs text-gray-500">Max selected: {maxKids === 999 ? '∞' : maxKids}</span>
+          <label className="ml-auto flex items-center gap-2 text-xs">
+            <input type="checkbox" checked={autoSelectActive} onChange={(e) => setAutoSelectActive(e.target.checked)} />
+            Auto-select active kid
+          </label>
         </div>
       </section>
 
-      {/* Local Kids */}
-      <section className="grid gap-3 rounded border p-4">
+      {/* Kids list */}
+      <section className="grid gap-3 rounded border p-3">
         <div className="flex items-center justify-between">
           <h2 className="font-medium">Kids (local, max 5)</h2>
-          <button className="rounded border px-3 py-1" onClick={addKid} disabled={kids.length >= 5}>
+          <button className="rounded border px-3 py-1 text-sm" onClick={addKid} disabled={kids.length >= 5}>
             Add child
           </button>
         </div>
-        <div className="grid gap-3">
-          {kids.length === 0 && (
-            <div className="text-sm text-gray-500">No kids yet. Click “Add child”.</div>
-          )}
+
+        <div className="flex gap-2 overflow-x-auto pb-1">
           {kids.map((k) => (
-            <div key={k.id} className="grid gap-3 rounded border p-3">
+            <button
+              key={k.id}
+              className={cls('shrink-0 rounded-full border px-3 py-1 text-sm', activeKidId === k.id && 'bg-black text-white')}
+              onClick={() => setActiveKidId(k.id)}
+            >
+              {k.name || '(unnamed)'}
+            </button>
+          ))}
+        </div>
+
+        <div className="grid gap-3">
+          {kids.length === 0 && <div className="text-sm text-gray-500">No kids yet. Tap “Add child”.</div>}
+          {kids.map((k) => (
+            <div key={k.id} className={cls('grid gap-3 rounded border p-3', activeKidId === k.id && 'ring-2 ring-black')}>
               <div className="grid items-end gap-2 md:grid-cols-6">
                 <label className="grid gap-1">
                   <span className="text-sm text-gray-600">Name</span>
                   <input
                     className="rounded border px-2 py-1"
                     value={k.name || ''}
+                    onFocus={(e) => {
+                      if (e.currentTarget.value === 'New child') e.currentTarget.value = '';
+                    }}
                     onChange={(e) => updateKid(k.id, { name: e.target.value })}
                   />
                 </label>
@@ -562,11 +686,7 @@ export default function AdminPage() {
                     className="rounded border px-2 py-1"
                     placeholder="8088"
                     value={k.port ?? ''}
-                    onChange={(e) =>
-                      updateKid(k.id, {
-                        port: e.target.value ? parseInt(e.target.value, 10) : undefined,
-                      })
-                    }
+                    onChange={(e) => updateKid(k.id, { port: e.target.value ? parseInt(e.target.value, 10) : undefined })}
                   />
                 </label>
                 <label className="grid gap-1">
@@ -585,9 +705,7 @@ export default function AdminPage() {
                   <select
                     className="rounded border px-2 py-1"
                     value={k.autoAction || 'screen_lock'}
-                    onChange={(e) =>
-                      updateKid(k.id, { autoAction: e.target.value as ActionV })
-                    }
+                    onChange={(e) => updateKid(k.id, { autoAction: e.target.value as ActionV })}
                   >
                     {ACTIONS.map((a) => (
                       <option key={a.v} value={a.v}>
@@ -602,11 +720,7 @@ export default function AdminPage() {
               <div className="grid gap-2">
                 <div className="flex items-center justify-between">
                   <div className="text-sm text-gray-600">Phone numbers (up to 5)</div>
-                  <button
-                    className="rounded border px-2 py-1 text-sm"
-                    onClick={() => addKidPhone(k.id)}
-                    disabled={(k.phones || []).length >= 5}
-                  >
+                  <button className="rounded border px-2 py-1 text-sm" onClick={() => addKidPhone(k.id)} disabled={(k.phones || []).length >= 5}>
                     Add phone
                   </button>
                 </div>
@@ -618,20 +732,18 @@ export default function AdminPage() {
                       value={p}
                       onChange={(e) => updateKidPhone(k.id, i, e.target.value)}
                     />
-                    <button
-                      className="rounded border px-2 py-1 text-sm"
-                      onClick={() => removeKidPhone(k.id, i)}
-                    >
+                    <button className="rounded border px-2 py-1 text-sm" onClick={() => removeKidPhone(k.id, i)}>
                       Remove
                     </button>
                   </div>
                 ))}
-                {(k.phones || []).length === 0 && (
-                  <div className="text-xs text-gray-500">No phones added.</div>
-                )}
+                {(k.phones || []).length === 0 && <div className="text-xs text-gray-500">No phones added.</div>}
               </div>
 
               <div className="flex gap-2">
+                <button className="rounded border px-3 py-1" onClick={() => setActiveKidId(k.id)}>
+                  Set Active
+                </button>
                 <button className="rounded border px-3 py-1" onClick={() => removeKid(k.id)}>
                   Delete child
                 </button>
@@ -640,78 +752,60 @@ export default function AdminPage() {
           ))}
         </div>
         <div className="text-xs text-gray-500">
-          (Names, IPs, ports, phones are stored <b>locally</b> in your browser. They’re not sent to
-          the server. Parental actions use the mapped API Child.)
+          (Names, IPs, ports, phones are stored <b>locally</b>. Parental actions use the mapped API Child.)
         </div>
       </section>
 
       {/* Create tasks */}
-      <section className="grid gap-3 rounded border p-4">
+      <section className="grid gap-3 rounded border p-3">
         <h2 className="font-medium">Create Minor Tasks</h2>
 
         {/* Select assignees */}
         <div className="grid gap-2">
           <div className="text-sm text-gray-600">
-            Select up to {maxKids === 999 ? '∞' : maxKids} children
+            Select up to {maxKids === 999 ? '∞' : maxKids} {autoSelectActive ? '(auto from Active Kid)' : ''}
           </div>
-          <div className="flex flex-wrap gap-2">
-            {kids.map((k) => {
-              const on = selectedKidIds.includes(k.id);
-              return (
-                <button
-                  key={k.id}
-                  type="button"
-                  onClick={() => toggleKid(k.id)}
-                  className={cls('rounded border px-3 py-1', on && 'bg-black text-white')}
-                >
-                  {k.name || '(unnamed)'}
-                </button>
-              );
-            })}
-            {kids.length === 0 && (
-              <span className="text-xs text-gray-500">Add kids above to assign tasks.</span>
-            )}
-          </div>
+          {!autoSelectActive && (
+            <div className="flex flex-wrap gap-2">
+              {kids.map((k) => {
+                const on = selectedKidIds.includes(k.id);
+                return (
+                  <button key={k.id} type="button" onClick={() => toggleKid(k.id)} className={cls('rounded border px-3 py-1', on && 'bg-black text-white')}>
+                    {k.name || '(unnamed)'}
+                  </button>
+                );
+              })}
+              {kids.length === 0 && <span className="text-xs text-gray-500">Add kids above to assign tasks.</span>}
+            </div>
+          )}
           <div className="text-xs text-gray-500">
-            Selected: {selectedKidIds.length}/{maxKids === 999 ? '∞' : maxKids}
+            Selected: {(autoSelectActive && activeKidId) ? 1 : selectedKidIds.length}/{maxKids === 999 ? '∞' : maxKids}
           </div>
         </div>
 
         {/* Task details */}
         <div className="grid gap-3 md:grid-cols-3">
           <label className="grid gap-1">
-            <span className="text-sm text-gray-600">Template</span>
-            <select
+            <span className="text-sm text-gray-600">Template (or type custom)</span>
+            <input
               className="rounded border px-2 py-1"
+              list="task-templates"
               value={template}
               onChange={(e) => {
                 setTemplate(e.target.value);
                 if (e.target.value) setTitle(e.target.value);
               }}
-            >
-              <option value="">(none)</option>
-              {TEMPLATES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
+              placeholder="e.g. Clean room"
+            />
+            <datalist id="task-templates">{TEMPLATES.map((t) => <option key={t} value={t} />)}</datalist>
           </label>
           <label className="grid gap-1">
             <span className="text-sm text-gray-600">Title</span>
-            <input
-              className="rounded border px-2 py-1"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
+            <input className="rounded border px-2 py-1" value={title} onChange={(e) => setTitle(e.target.value)} />
           </label>
           <label className="grid gap-1">
             <span className="text-sm text-gray-600">Recurrence</span>
-            <select
-              className="rounded border px-2 py-1"
-              value={recurrence}
-              onChange={(e) => setRecurrence(e.target.value as 'none' | 'daily' | 'weekly')}
-            >
+            <select className="rounded border px-2 py-1" value={recurrence} onChange={(e) => setRecurrence(e.target.value as any)}>
               <option value="none">One-time (minutes from now)</option>
               <option value="daily">Daily (at time)</option>
               <option value="weekly">Weekly (day &amp; time)</option>
@@ -721,34 +815,19 @@ export default function AdminPage() {
           {recurrence === 'none' && (
             <label className="grid gap-1">
               <span className="text-sm text-gray-600">Due (minutes from now)</span>
-              <input
-                type="number"
-                min={1}
-                className="rounded border px-2 py-1"
-                value={dueMins}
-                onChange={(e) => setDueMins(parseInt(e.target.value || '0', 10))}
-              />
+              <input type="number" min={1} className="rounded border px-2 py-1" value={dueMins} onChange={(e) => setDueMins(parseInt(e.target.value || '0', 10))} />
             </label>
           )}
           {(recurrence === 'daily' || recurrence === 'weekly') && (
             <label className="grid gap-1">
               <span className="text-sm text-gray-600">Time</span>
-              <input
-                type="time"
-                className="rounded border px-2 py-1"
-                value={timeHHMM}
-                onChange={(e) => setTimeHHMM(e.target.value)}
-              />
+              <input type="time" className="rounded border px-2 py-1" value={timeHHMM} onChange={(e) => setTimeHHMM(e.target.value)} />
             </label>
           )}
           {recurrence === 'weekly' && (
             <label className="grid gap-1">
               <span className="text-sm text-gray-600">Day of week</span>
-              <select
-                className="rounded border px-2 py-1"
-                value={weeklyDOW}
-                onChange={(e) => setWeeklyDOW(parseInt(e.target.value, 10))}
-              >
+              <select className="rounded border px-2 py-1" value={weeklyDOW} onChange={(e) => setWeeklyDOW(parseInt(e.target.value, 10))}>
                 <option value={0}>Sunday</option>
                 <option value={1}>Monday</option>
                 <option value={2}>Tuesday</option>
@@ -764,36 +843,17 @@ export default function AdminPage() {
         {/* options */}
         <div className="flex flex-wrap items-center gap-4">
           <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={ackRequired}
-              onChange={(e) => setAckRequired(e.target.checked)}
-            />{' '}
-            Ack required
+            <input type="checkbox" checked={ackRequired} onChange={(e) => setAckRequired(e.target.checked)} /> Ack required
           </label>
           <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={photoProof}
-              onChange={(e) => setPhotoProof(e.target.checked)}
-            />{' '}
-            Photo proof
+            <input type="checkbox" checked={photoProof} onChange={(e) => setPhotoProof(e.target.checked)} /> Photo proof
           </label>
           <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={autoEnforce}
-              onChange={(e) => setAutoEnforce(e.target.checked)}
-            />{' '}
-            Auto enforce on overdue
+            <input type="checkbox" checked={autoEnforce} onChange={(e) => setAutoEnforce(e.target.checked)} /> Auto enforce on overdue
           </label>
           <label className="flex items-center gap-2 text-sm">
             <span>Auto action</span>
-            <select
-              className="rounded border px-2 py-1"
-              value={autoAction}
-              onChange={(e) => setAutoAction(e.target.value as ActionV)}
-            >
+            <select className="rounded border px-2 py-1" value={autoAction} onChange={(e) => setAutoAction(e.target.value as ActionV)}>
               {ACTIONS.map((a) => (
                 <option key={a.v} value={a.v}>
                   {a.label}
@@ -808,7 +868,7 @@ export default function AdminPage() {
           <button
             className="rounded border px-3 py-1"
             onClick={() => void createMinorTasks()}
-            disabled={busy || selectedKidIds.length === 0}
+            disabled={busy || (!autoSelectActive && selectedKidIds.length === 0) || (autoSelectActive && !activeKidId)}
           >
             Save
           </button>
@@ -819,12 +879,10 @@ export default function AdminPage() {
       </section>
 
       {/* Parental Enforce */}
-      <section className="grid gap-2 rounded border p-4">
+      <section className="grid gap-2 rounded border p-3">
         <h2 className="font-medium">Parental Enforce</h2>
         <div className="grid gap-3">
-          {kids.length === 0 && (
-            <div className="text-sm text-gray-500">Add kids above and map them to API Child users.</div>
-          )}
+          {kids.length === 0 && <div className="text-sm text-gray-500">Add kids above and map them to API Child users.</div>}
           {kids.map((k) => {
             const apiUserId = k.apiUserId || childUsers[0]?.id || '';
             return (
@@ -832,18 +890,12 @@ export default function AdminPage() {
                 <div className="font-medium">
                   {k.name || '(unnamed)'}{' '}
                   <span className="text-xs text-gray-500">
-                    IP: {k.ip || '-'}:{k.port ?? '-'} • Phones:{' '}
-                    {(k.phones || []).filter(Boolean).join(', ') || '-'}
+                    IP: {k.ip || '-'}:{k.port ?? '-'} • Phones: {(k.phones || []).filter(Boolean).join(', ') || '-'}
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {ACTIONS.map((a) => (
-                    <button
-                      key={a.v}
-                      className="rounded border px-2 py-1"
-                      disabled={!apiUserId}
-                      onClick={() => void enforce(apiUserId, a.v, 'Admin')}
-                    >
+                    <button key={a.v} className="rounded border px-2 py-1" disabled={!apiUserId} onClick={() => void enforce(apiUserId, a.v, 'Admin')}>
                       {a.label}
                     </button>
                   ))}
@@ -855,7 +907,7 @@ export default function AdminPage() {
       </section>
 
       {/* Tasks table */}
-      <section className="grid gap-2 rounded border p-4">
+      <section className="grid gap-2 rounded border p-3">
         <div className="flex items-center justify-between">
           <h2 className="font-medium">Tasks</h2>
           <button className="rounded border px-3 py-1" onClick={() => void loadAll()}>
@@ -903,9 +955,194 @@ export default function AdminPage() {
         </div>
       </section>
 
+      {/* Phone Previews (local only) */}
+      <section className="grid gap-3 rounded border p-3">
+        <h2 className="font-medium">Phone Preview</h2>
+        <div className="text-xs text-gray-500">Local-only preview (no backend writes). Choose an active kid above.</div>
+
+        {/* Kid phone */}
+        <div className="grid gap-2 rounded border p-3">
+          <div className="font-medium">Kid Phone</div>
+          {!activeKidId && <div className="text-sm text-gray-500">Select an active kid to preview.</div>}
+          {!!activeKidId &&
+            (() => {
+              const kid = kids.find((k) => k.id === activeKidId)!;
+              const apiUserId = kid.apiUserId || childUsers[0]?.id || '';
+              const assigned = tasks.filter((t) => apiUserId && t.assignedTo === apiUserId);
+              const mt = phoneTasks[activeKidId] || [];
+              const manualInputId = `kid-manual-title-${activeKidId}`;
+
+              return (
+                <div className="grid gap-3">
+                  {/* local manual tasks */}
+                  <div className="grid gap-2">
+                    <label className="grid gap-1">
+                      <span className="text-sm text-gray-600">Add Manual Task (local)</span>
+                      <div className="flex gap-2">
+                        <input id={manualInputId} className="rounded border px-2 py-1 flex-1" placeholder="e.g. Stretch for 5 minutes" />
+                        <button
+                          className="rounded border px-3 py-1"
+                          onClick={() => {
+                            const el = document.getElementById(manualInputId) as HTMLInputElement | null;
+                            const val = el?.value?.trim();
+                            if (!val) return;
+                            const entry = { id: `local-${Date.now()}`, title: val };
+                            const next = { ...phoneTasks, [activeKidId]: [...mt, entry] };
+                            try {
+                              localStorage.setItem(LSK_LOCAL_PHONE_TASKS, JSON.stringify(next));
+                            } catch {}
+                            setPhoneTasks(next);
+                            if (el) el.value = '';
+                          }}
+                        >
+                          Add
+                        </button>
+                      </div>
+                    </label>
+                    {mt.length > 0 && (
+                      <div className="grid gap-1">
+                        <div className="text-xs text-gray-600">Local tasks</div>
+                        {mt.map((m) => (
+                          <div key={m.id} className="flex items-center justify-between rounded border px-2 py-1">
+                            <span className="text-sm">{m.title}</span>
+                            <button
+                              className="rounded border px-2 py-0.5 text-xs"
+                              onClick={() => {
+                                const next = { ...phoneTasks, [activeKidId]: mt.filter((x) => x.id !== m.id) };
+                                try {
+                                  localStorage.setItem(LSK_LOCAL_PHONE_TASKS, JSON.stringify(next));
+                                } catch {}
+                                setPhoneTasks(next);
+                              }}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* assigned tasks */}
+                  <div className="grid gap-2">
+                    <div className="text-sm text-gray-600">Assigned Tasks (API)</div>
+                    {assigned.length === 0 && <div className="text-xs text-gray-500">No assigned tasks.</div>}
+                    {assigned.map((t) => {
+                      const note = taskNotes[t.id] || { status: 'not_started' as KidStatus, comment: '' };
+                      return (
+                        <div key={t.id} className="grid gap-2 rounded border p-2">
+                          <div className="flex items-center justify-between">
+                            <div className="text-sm font-medium">{t.title}</div>
+                            <div className="text-xs text-gray-500">{t.due ? new Date(t.due).toLocaleString() : '-'}</div>
+                          </div>
+                          <div className="grid gap-2 sm:flex sm:items-center sm:gap-3">
+                            <label className="flex items-center gap-2 text-sm">
+                              <span>Status</span>
+                              <select
+                                className="rounded border px-2 py-1"
+                                value={note.status}
+                                onChange={(e) => {
+                                  const next = { ...taskNotes, [t.id]: { ...note, status: e.target.value as KidStatus } };
+                                  persistTaskNotes(next);
+                                }}
+                              >
+                                <option value="not_started">Not started</option>
+                                <option value="in_progress">In progress</option>
+                                <option value="almost_done">Almost done</option>
+                                <option value="done">Done</option>
+                                <option value="skipped">Skipped</option>
+                              </select>
+                            </label>
+                            <button className="rounded border px-2 py-1 text-sm" onClick={() => void ackTask(t.id)}>
+                              Acknowledge
+                            </button>
+                          </div>
+                          <label className="grid gap-1">
+                            <span className="text-sm">Comment</span>
+                            <textarea
+                              className="rounded border px-2 py-1"
+                              rows={2}
+                              placeholder="I'm feeling sick…"
+                              value={note.comment || ''}
+                              onChange={(e) => {
+                                const next = { ...taskNotes, [t.id]: { ...note, comment: e.target.value } };
+                                persistTaskNotes(next);
+                              }}
+                            />
+                          </label>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+        </div>
+
+        {/* Owner preview */}
+        <div className="grid gap-2 rounded border p-3">
+          <div className="font-medium">Owner Preview</div>
+          {!activeKidId && <div className="text-sm text-gray-500">Select an active kid to preview.</div>}
+          {!!activeKidId &&
+            (() => {
+              const kid = kids.find((k) => k.id === activeKidId)!;
+              const apiUserId = kid.apiUserId || childUsers[0]?.id || '';
+              const assigned = tasks.filter((t) => apiUserId && t.assignedTo === apiUserId);
+              return (
+                <div className="grid gap-2">
+                  {assigned.map((t) => {
+                    const note = ownerNotes[t.id] || { preset: '', comment: '' };
+                    return (
+                      <div key={t.id} className="grid gap-2 rounded border p-2">
+                        <div className="text-sm font-medium">{t.title}</div>
+                        <div className="grid gap-2 sm:flex sm:items-center sm:gap-3">
+                          <label className="flex items-center gap-2 text-sm">
+                            <span>Quick comment</span>
+                            <select
+                              className="rounded border px-2 py-1"
+                              value={note.preset || ''}
+                              onChange={(e) => {
+                                const next = { ...ownerNotes, [t.id]: { ...note, preset: e.target.value } };
+                                persistOwnerNotes(next);
+                              }}
+                            >
+                              <option value="">(none)</option>
+                              <option value="good_job">Good job!</option>
+                              <option value="please_finish">Please finish soon</option>
+                              <option value="almost_there">Almost there—keep going</option>
+                              <option value="need_help">Need help?</option>
+                            </select>
+                          </label>
+                        </div>
+                        <label className="grid gap-1">
+                          <span className="text-sm">Message</span>
+                          <textarea
+                            className="rounded border px-2 py-1"
+                            rows={2}
+                            placeholder="Proud of you for sticking with it!"
+                            value={note.comment || ''}
+                            onChange={(e) => {
+                              const next = { ...ownerNotes, [t.id]: { ...note, comment: e.target.value } };
+                              persistOwnerNotes(next);
+                            }}
+                          />
+                        </label>
+                        <div className="text-xs text-gray-500">Saved locally (no server endpoint yet).</div>
+                      </div>
+                    );
+                  })}
+                  {assigned.length === 0 && <div className="text-xs text-gray-500">No assigned tasks to comment on.</div>}
+                </div>
+              );
+            })()}
+        </div>
+      </section>
+
+      {/* Footer */}
       <footer className="text-xs text-gray-500">
-        Connected to API at {API_BASE} as <b>{acting}</b>
+        Connected to API at {API_BASE} as <b>{actingUser}</b>
       </footer>
     </div>
   );
 }
+

@@ -24,7 +24,7 @@ export default async function Page({ searchParams }: { searchParams: SearchParam
   }
 
   // Load Checkout Session and prefer hosted invoice (subs). Fallback to receipt (one-time).
-  const session = await stripe.checkout.sessions.retrieve(sid, {
+  const session = await stripe!.checkout.sessions.retrieve(sid, {
     expand: ['payment_intent.charges', 'invoice'],
   });
 
@@ -33,7 +33,7 @@ export default async function Page({ searchParams }: { searchParams: SearchParam
 
   if (session.invoice) {
     if (typeof session.invoice === 'string') {
-      const inv = await stripe.invoices.retrieve(session.invoice);
+      const inv = await stripe!.invoices.retrieve(session.invoice);
       invoiceUrl = inv.hosted_invoice_url || (inv as any).invoice_pdf || undefined;
     } else {
       const inv = session.invoice;
@@ -42,7 +42,7 @@ export default async function Page({ searchParams }: { searchParams: SearchParam
   }
 
   if (!invoiceUrl && session.payment_intent && typeof session.payment_intent !== 'string') {
-    const ch = session.payment_intent.charges?.data?.[0];
+    const ch = (session.payment_intent as any)?.charges?.data?.[0];
     receiptUrl = ch?.receipt_url || undefined;
   }
 
@@ -77,3 +77,6 @@ export default async function Page({ searchParams }: { searchParams: SearchParam
     </main>
   );
 }
+
+
+

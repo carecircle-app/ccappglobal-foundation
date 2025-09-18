@@ -1,4 +1,4 @@
-export const dynamic = "force-static";
+﻿export const dynamic = "force-static";
 export const metadata = { title: "Checkout canceled  CareCircle" };
 
 export default function CancelPage() {
@@ -10,3 +10,4 @@ export default function CancelPage() {
     </main>
   );
 }
+
