@@ -1,0 +1,482 @@
+
+Original 1150 lines ADMIN for KIDS
+
+
+
+'use client';
+
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+
+/** =======================
+ *  Types
+ *  ======================= */
+type Role = 'Owner' | 'Child' | 'Minor' | 'Family';
+type User = { id: string; name: string; role: Role };
+type Task = { id: string; title: string; due?: number };
+type PlanKey = 'free' | 'lite' | 'elite';
+
+type LocalKid = {
+  name: string;
+  ip?: string;
+  port?: number;
+  autoMode?: 'manual' | 'auto';
+  autoAction?: 'lock' | 'notify' | 'none';
+  phones?: string[];
+};
+
+/** =======================
+ *  Config / constants
+ *  ======================= */
+const API_BASE =
+  (typeof process !== 'undefined' &&
+    process.env.NEXT_PUBLIC_API_URL) ||
+  'http://127.0.0.1:4000';
+
+const MAX_LOCAL_KIDS = 5;
+const LSK_OWNER_LABEL = 'cc_owner_label';
+const LSK_RECENTS_PREFIX = 'cc_owner_recents:'; // per-owner
+const LSK_KIDS = 'cc_local_kids';
+const LSK_PLAN = 'cc_plan';
+const LSK_AUTO_SELECT = 'cc_auto_select_kid';
+
+/** =======================
+ *  Small helpers (ESLint-friendly)
+ *  ======================= */
+const clampPort = (n?: number) => {
+  if (!Number.isFinite(n)) return undefined;
+  const v = Math.max(1, Math.min(65535, Math.floor(Number(n))));
+  return Number.isFinite(v) ? v : undefined;
+};
+
+const isIPv4 = (s?: string) =>
+  !!s &&
+  /^(\d{1,3}\.){3}\d{1,3}$/.test(s) &&
+  s.split('.').every((x) => Number(x) >= 0 && Number(x) <= 255);
+
+const phoneSan = (s: string) =>
+  s.replace(/[^\d+]/g, '').slice(0, 18);
+
+const slug = (s: string) =>
+  s.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+
+function uniqBy<T>(arr: T[], key: (x: T) => string): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  // eslint-disable-next-line no-restricted-syntax
+  for (const x of arr) {
+    const k = key(x);
+    if (!seen.has(k)) {
+      seen.add(k);
+      out.push(x);
+    }
+  }
+  return out;
+}
+
+async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(), 10_000);
+  try {
+    const res = await fetch(url, { ...init, signal: ctrl.signal, headers: { ...(init?.headers || {}) } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return (await res.json()) as T;
+  } finally {
+    clearTimeout(id);
+  }
+}
+
+/** =======================
+ *  Main page
+ *  ======================= */
+export default function AdminPage(): JSX.Element {
+  /** -------- API / server state -------- */
+  const [users, setUsers] = useState<User[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [apiError, setApiError] = useState<string>('');
+
+  /** -------- Owner / plan / feature gates -------- */
+  const [ownerLabel, setOwnerLabel] = useState<string>('');
+  const [plan, setPlan] = useState<PlanKey>('free');
+  const maxKids = useMemo(() => {
+    switch (plan) {
+      case 'elite': return 5;
+      case 'lite': return 3;
+      default: return 1;
+    }
+  }, [plan]);
+
+  /** -------- Local kids + UI memory -------- */
+  const [kids, setKids] = useState<LocalKid[]>([]);
+  const [autoSelectActive, setAutoSelectActive] = useState<boolean>(true);
+
+  /** -------- Acting user -------- */
+  const [actingUser, setActingUser] = useState<string>(''); // no default user
+  const [actingName, setActingName] = useState<string>(''); // display label
+
+  /** =======================
+   *  Load persisted UI state
+   *  ======================= */
+  useEffect(() => {
+    try {
+      const k = localStorage.getItem(LSK_KIDS);
+      if (k) setKids(JSON.parse(k));
+    } catch {/* ignore */}
+    try {
+      const o = localStorage.getItem(LSK_OWNER_LABEL);
+      if (o) setOwnerLabel(o);
+    } catch {/* ignore */}
+    try {
+      const p = localStorage.getItem(LSK_PLAN) as PlanKey | null;
+      if (p === 'free' || p === 'lite' || p === 'elite') setPlan(p);
+    } catch {/* ignore */}
+    try {
+      const a = localStorage.getItem(LSK_AUTO_SELECT);
+      if (a === '0' || a === '1') setAutoSelectActive(a === '1');
+    } catch {/* ignore */}
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LSK_KIDS, JSON.stringify(kids));
+    } catch {/* ignore */}
+  }, [kids]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LSK_OWNER_LABEL, ownerLabel || '');
+    } catch {/* ignore */}
+  }, [ownerLabel]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LSK_PLAN, plan);
+    } catch {/* ignore */}
+  }, [plan]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LSK_AUTO_SELECT, autoSelectActive ? '1' : '0');
+    } catch {/* ignore */}
+  }, [autoSelectActive]);
+
+  /** =======================
+   *  API: users/tasks (soft-fail)
+   *  ======================= */
+  const refreshFromApi = useCallback(async () => {
+    try {
+      setApiError('');
+      const [u] = await Promise.all([
+        fetchJSON<User[]>(`${API_BASE}/api/users`).catch(() => []),
+        // tasks optionally in future:
+        // fetchJSON<Task[]>(`${API_BASE}/api/tasks`).catch(() => []),
+      ]);
+      setUsers(Array.isArray(u) ? u : []);
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : 'API error');
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshFromApi();
+  }, [refreshFromApi]);
+
+  /** =======================
+   *  Acting options (API + locals + recents) — no preseeded names
+   *  ======================= */
+  type ActingOption = { id: string; label: string; source: 'api' | 'kid' | 'recent' };
+
+  const actingOptions = useMemo<ActingOption[]>(() => {
+    const apiOptions: ActingOption[] = (users ?? [])
+      .map((u) => ({ id: u.id, label: `${u.name} (${u.role})`, source: 'api' }));
+
+    const kidOptions: ActingOption[] = (kids ?? []).map((k) => ({
+      id: `kid:${slug(k.name)}`,
+      label: k.name,
+      source: 'kid',
+    }));
+
+    let recentOptions: ActingOption[] = [];
+    try {
+      const ownerKey = (ownerLabel || 'Owner').trim();
+      const raw = localStorage.getItem(LSK_RECENTS_PREFIX + ownerKey);
+      const names: string[] = raw ? JSON.parse(raw) : [];
+      recentOptions = names.map((n) => ({ id: `recent:${slug(n)}`, label: `Recent: ${n}`, source: 'recent' }));
+    } catch { /* ignore */ }
+
+    // merge, keep unique by label; kids last so they appear if API empty
+    return uniqBy<ActingOption>([...recentOptions, ...apiOptions, ...kidOptions], (x) => x.label);
+  }, [users, kids, ownerLabel]);
+
+  /** Keep actingName in sync + auto-select first kid if desired */
+  useEffect(() => {
+    const opt = actingOptions.find((o) => o.id === actingUser);
+    if (opt?.label) setActingName(opt.label.replace(/^Recent:\s*/, ''));
+
+    if (autoSelectActive && !actingUser) {
+      const firstKid = actingOptions.find((o) => o.source === 'kid');
+      if (firstKid) {
+        setActingUser(firstKid.id);
+        setActingName(firstKid.label);
+      }
+    }
+
+    // persist recents if a kid or recent is selected
+    try {
+      const opt2 = actingOptions.find((o) => o.id === actingUser);
+      if (opt2 && (opt2.source === 'kid' || opt2.source === 'recent')) {
+        const cleanName = opt2.label.replace(/^Recent:\s*/, '');
+        const key = LSK_RECENTS_PREFIX + (ownerLabel || 'Owner').trim();
+        const raw = localStorage.getItem(key);
+        let arr: string[] = raw ? JSON.parse(raw) : [];
+        arr = [cleanName, ...arr.filter((n) => n !== cleanName)].slice(0, 8);
+        localStorage.setItem(key, JSON.stringify(arr));
+      }
+    } catch { /* ignore */ }
+  }, [actingUser, actingOptions, autoSelectActive, ownerLabel]);
+
+  /** =======================
+   *  Local kids mutators (guardrailed)
+   *  ======================= */
+  const addKid = useCallback(() => {
+    setKids((prev) => {
+      if (prev.length >= Math.min(MAX_LOCAL_KIDS, maxKids)) return prev;
+      return [
+        ...prev,
+        { name: `New child ${prev.length + 1}`, ip: '192.168.1.42', port: 8088, autoMode: 'manual', autoAction: 'lock', phones: [] },
+      ];
+    });
+  }, [maxKids]);
+
+  const updateKid = useCallback((idx: number, patch: Partial<LocalKid>) => {
+    setKids((prev) => prev.map((k, i) => (i === idx ? { ...k, ...patch } : k)));
+  }, []);
+
+  const deleteKid = useCallback((idx: number) => {
+    setKids((prev) => prev.filter((_, i) => i !== idx));
+  }, []);
+
+  /** =======================
+   *  Render
+   *  ======================= */
+  return (
+    <div className="mx-auto max-w-5xl p-4 md:p-6">
+      <h1 className="text-2xl font-semibold mb-4">Admin</h1>
+
+      {/* Acting user & refresh */}
+      <div className="flex flex-col md:flex-row md:items-end gap-3 mb-4">
+        <div className="flex-1">
+          <label className="block text-sm font-medium mb-1">Acting user</label>
+          <select
+            className="w-full rounded border px-3 py-2 text-sm"
+            value={actingUser}
+            onChange={(e) => setActingUser(e.target.value)}
+          >
+            <option value="" disabled>
+              {actingOptions.length ? 'Select user/kid' : 'Add a kid below to begin'}
+            </option>
+            {actingOptions.map((opt) => (
+              <option key={opt.id} value={opt.id}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <button
+          type="button"
+          className="rounded border px-3 py-2 text-sm md:self-auto"
+          onClick={() => { void refreshFromApi(); }}
+          aria-label="Refresh from API"
+        >
+          Refresh
+        </button>
+
+        <label className="inline-flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={autoSelectActive}
+            onChange={(e) => setAutoSelectActive(e.target.checked)}
+          />
+          Auto-select active kid
+        </label>
+      </div>
+
+      {/* Plan gating */}
+      <div className="mb-6 flex flex-col md:flex-row gap-3 md:items-end">
+        <div>
+          <label className="block text-sm font-medium mb-1">Plan</label>
+          <select
+            className="rounded border px-3 py-2 text-sm"
+            value={plan}
+            onChange={(e) => setPlan(e.target.value as PlanKey)}
+          >
+            <option value="free">Free (1 child)</option>
+            <option value="lite">Lite (3 children)</option>
+            <option value="elite">Elite (5 children)</option>
+          </select>
+        </div>
+        <div className="text-sm text-gray-600">Max selected: {Math.min(MAX_LOCAL_KIDS, maxKids)}</div>
+      </div>
+
+      {/* API banner (non-blocking) */}
+      {apiError && (
+        <div className="mb-4 rounded border border-red-300 bg-red-50 p-3 text-sm">
+          <code>&lt;pre&gt;Cannot GET /api/users&lt;/pre&gt;</code>
+        </div>
+      )}
+
+      {/* Kids list */}
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-lg font-medium">Kids (local, max {Math.min(MAX_LOCAL_KIDS, maxKids)})</h2>
+        <button
+          type="button"
+          className="rounded border px-3 py-2 text-sm"
+          onClick={addKid}
+          disabled={kids.length >= Math.min(MAX_LOCAL_KIDS, maxKids)}
+        >
+          Add child
+        </button>
+      </div>
+
+      <div className="space-y-4">
+        {kids.map((k, idx) => (
+          <div key={idx} className="rounded border p-3">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+              <div className="md:col-span-3">
+                <label className="block text-xs font-medium mb-1">Name</label>
+                <input
+                  className="w-full rounded border px-3 py-2 text-sm"
+                  value={k.name}
+                  onChange={(e) => updateKid(idx, { name: e.target.value.slice(0, 40) })}
+                />
+              </div>
+
+              <div className="md:col-span-3">
+                <label className="block text-xs font-medium mb-1">Device IP</label>
+                <input
+                  className="w-full rounded border px-3 py-2 text-sm"
+                  value={k.ip ?? ''}
+                  onChange={(e) =>
+                    updateKid(idx, { ip: isIPv4(e.target.value) ? e.target.value : e.target.value })
+                  }
+                  placeholder="192.168.1.42"
+                  inputMode="decimal"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-xs font-medium mb-1">Port</label>
+                <input
+                  className="w-full rounded border px-3 py-2 text-sm"
+                  value={k.port ?? ''}
+                  onChange={(e) => updateKid(idx, { port: clampPort(Number(e.target.value)) })}
+                  placeholder="8088"
+                  inputMode="numeric"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-xs font-medium mb-1">Auto/Manual</label>
+                <select
+                  className="w-full rounded border px-3 py-2 text-sm"
+                  value={k.autoMode ?? 'manual'}
+                  onChange={(e) => updateKid(idx, { autoMode: (e.target.value as LocalKid['autoMode']) })}
+                >
+                  <option value="manual">Manual only</option>
+                  <option value="auto">Auto allowed</option>
+                </select>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-xs font-medium mb-1">Auto Action</label>
+                <select
+                  className="w-full rounded border px-3 py-2 text-sm"
+                  value={k.autoAction ?? 'lock'}
+                  onChange={(e) => updateKid(idx, { autoAction: (e.target.value as LocalKid['autoAction']) })}
+                >
+                  <option value="lock">Lock screen</option>
+                  <option value="notify">Notify only</option>
+                  <option value="none">No action</option>
+                </select>
+              </div>
+            </div>
+
+            {/* phones */}
+            <div className="mt-3">
+              <div className="text-xs font-medium mb-1">Phone numbers (up to 5)</div>
+              <div className="flex flex-wrap gap-2">
+                {(k.phones ?? []).map((p, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <input
+                      className="rounded border px-2 py-1 text-sm"
+                      value={p}
+                      onChange={(e) => {
+                        const v = phoneSan(e.target.value);
+                        const next = [...(k.phones ?? [])];
+                        next[i] = v;
+                        updateKid(idx, { phones: next.slice(0, 5) });
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="rounded border px-2 py-1 text-xs"
+                      onClick={() => {
+                        const next = [...(k.phones ?? [])];
+                        next.splice(i, 1);
+                        updateKid(idx, { phones: next });
+                      }}
+                      aria-label="Delete phone"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                {(k.phones?.length ?? 0) < 5 && (
+                  <button
+                    type="button"
+                    className="rounded border px-2 py-1 text-xs"
+                    onClick={() => updateKid(idx, { phones: [...(k.phones ?? []), ''] })}
+                  >
+                    Add phone
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                className="rounded border px-3 py-2 text-sm"
+                onClick={() => {
+                  setActingUser(`kid:${slug(k.name)}`);
+                  setActingName(k.name);
+                }}
+              >
+                Set Active
+              </button>
+              <button
+                type="button"
+                className="rounded border px-3 py-2 text-sm"
+                onClick={() => deleteKid(idx)}
+              >
+                Delete child
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* (Optional) Tasks section placeholder */}
+      {tasks.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-lg font-medium mb-2">Tasks</h2>
+          <ul className="list-disc pl-5 text-sm">
+            {tasks.map((t) => (
+              <li key={t.id}>{t.title}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}

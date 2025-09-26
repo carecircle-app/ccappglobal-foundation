@@ -1,6 +1,6 @@
-// src/app/pricing/page.tsx
+﻿// src/app/pricing/page.tsx
 export const metadata = {
-  title: "Pricing — CareCircle",
+  title: "Pricing â€” CareCircle",
   description: "Free, Lite, and Elite plans for every family.",
 };
 
@@ -53,59 +53,59 @@ const env = {
 
 const rawPlans: Plan[] = [
   {
-    name: "🌱 Free",
+    name: "ðŸŒ± Free",
     price: "$0.00 / month",
     ctaColor: "slate",
     features: [
-      { text: "👶 1 kid", href: R.tasks },
-      { text: "📅 Simple family calendar", href: R.calendar },
-      { text: "✅ Chores with little reminders", href: R.tasks },
-      { text: "📲 Text me when it’s chore time (SMS)", href: R.tasks },
-      { text: "🔒 Parent can lock or turn off the screen*", href: R.devices },
-      { text: "💬 Family chat (short history)", href: R.chat },
-      { text: "📍 Home & school alerts (1–2 places)", href: R.map },
+      { text: "ðŸ‘¶ 1 kid", href: R.tasks },
+      { text: "ðŸ“… Simple family calendar", href: R.calendar },
+      { text: "âœ… Chores with little reminders", href: R.tasks },
+      { text: "ðŸ“² Text me when itâ€™s chore time (SMS)", href: R.tasks },
+      { text: "ðŸ”’ Parent can lock or turn off the screen*", href: R.devices },
+      { text: "ðŸ’¬ Family chat (short history)", href: R.chat },
+      { text: "ðŸ“ Home & school alerts (1â€“2 places)", href: R.map },
     ],
   },
   {
-    name: "🌟 Lite",
+    name: "ðŸŒŸ Lite",
     price: "$4.99 / month",
     ctaColor: "emerald",
     features: [
-      { text: "👧👦 2 kids", href: R.tasks },
-      { text: "📅 Better calendar (colors + smarter reminders)", href: R.calendar },
-      { text: "✅ Chores with photo check", href: R.tasks },
-      { text: "📲 Text + app alerts for chores", href: R.tasks },
-      { text: "🔒 Lock / pause internet*", href: R.devices },
-      { text: "🎥 Quick check-in video", href: R.livestream },
-      { text: "🛒 Shopping lists + keep simple receipts", href: R.receipts },
-      { text: "🅿️ Park-my-car helper (save the spot)", href: R.map },
-      { text: "📍 Home & school alerts (2 places)", href: R.map },
+      { text: "ðŸ‘§ðŸ‘¦ 2 kids", href: R.tasks },
+      { text: "ðŸ“… Better calendar (colors + smarter reminders)", href: R.calendar },
+      { text: "âœ… Chores with photo check", href: R.tasks },
+      { text: "ðŸ“² Text + app alerts for chores", href: R.tasks },
+      { text: "ðŸ”’ Lock / pause internet*", href: R.devices },
+      { text: "ðŸŽ¥ Quick check-in video", href: R.livestream },
+      { text: "ðŸ›’ Shopping lists + keep simple receipts", href: R.receipts },
+      { text: "ðŸ…¿ï¸ Park-my-car helper (save the spot)", href: R.map },
+      { text: "ðŸ“ Home & school alerts (2 places)", href: R.map },
     ],
   },
   {
-    name: "🚀 Elite",
+    name: "ðŸš€ Elite",
     price: "$9.99 / month",
     ctaColor: "sky",
     features: [
-      { text: "👩‍👩‍👧‍👦 Up to 5 kids (or more)", href: R.tasks },
-      { text: "📅 Super calendar (smart colors & nudges)", href: R.calendar },
-      { text: "✅ Chores that nudge kindly if they forget", href: R.tasks },
-      { text: "📲 Text + push + phone-style alerts", href: R.tasks },
-      { text: "🔒 Lock screen / pause internet / shut down*", href: R.devices },
-      { text: "💬 Unlimited chat & longer live video check-ins", href: R.livestream },
-      { text: "🛒 Receipts, budgets, shopping lists (advanced)", href: R.receipts },
-      { text: "🅿️ Park-my-car + find my spot", href: R.map },
-      { text: "🛰️ Geofencing zones & instant place alerts", href: R.map }, // ← added
-      { text: "📂 Safe place for doctor notes & school forms", href: R.docs },
-      { text: "🛡️ Family safety (parents, kids, relatives, caregivers)", href: R.devices },
-      { text: "🚨 SOS & fall alerts, loud alarm", href: R.devices },
-      { text: "❤️ Priority support (fast help)", href: R.pricing },
+      { text: "ðŸ‘©â€ðŸ‘©â€ðŸ‘§â€ðŸ‘¦ Up to 5 kids (or more)", href: R.tasks },
+      { text: "ðŸ“… Super calendar (smart colors & nudges)", href: R.calendar },
+      { text: "âœ… Chores that nudge kindly if they forget", href: R.tasks },
+      { text: "ðŸ“² Text + push + phone-style alerts", href: R.tasks },
+      { text: "ðŸ”’ Lock screen / pause internet / shut down*", href: R.devices },
+      { text: "ðŸ’¬ Unlimited chat & longer live video check-ins", href: R.livestream },
+      { text: "ðŸ›’ Receipts, budgets, shopping lists (advanced)", href: R.receipts },
+      { text: "ðŸ…¿ï¸ Park-my-car + find my spot", href: R.map },
+      { text: "ðŸ›°ï¸ Geofencing zones & instant place alerts", href: R.map }, // â† added
+      { text: "ðŸ“‚ Safe place for doctor notes & school forms", href: R.docs },
+      { text: "ðŸ›¡ï¸ Family safety (parents, kids, relatives, caregivers)", href: R.devices },
+      { text: "ðŸš¨ SOS & fall alerts, loud alarm", href: R.devices },
+      { text: "â¤ï¸ Priority support (fast help)", href: R.pricing },
       // Health
-      { text: "🧼 ADL checklists + caregiver handoff", href: R.health },
-      { text: "❤️ Vital signs (BP, heart, temp, O2, weight)", href: R.health },
-      { text: "🍎 Diabetes logs (sugar, insulin, food)", href: R.health },
-      { text: "💊 Medicine helper & MAR (pill times, refills, export)", href: R.health },
-      { text: "📝 Daily care notes with photos & reports", href: R.health },
+      { text: "ðŸ§¼ ADL checklists + caregiver handoff", href: R.health },
+      { text: "â¤ï¸ Vital signs (BP, heart, temp, O2, weight)", href: R.health },
+      { text: "ðŸŽ Diabetes logs (sugar, insulin, food)", href: R.health },
+      { text: "ðŸ’Š Medicine helper & MAR (pill times, refills, export)", href: R.health },
+      { text: "ðŸ“ Daily care notes with photos & reports", href: R.health },
     ],
   },
 ];
@@ -170,7 +170,7 @@ export default function PricingPage() {
           href={R.home}
           className="inline-flex items-center text-sm font-medium text-emerald-700 hover:underline"
         >
-          ← Back to Home
+          â† Back to Home
         </a>
       </div>
 
@@ -178,7 +178,7 @@ export default function PricingPage() {
         <div className="mx-auto max-w-6xl px-6">
           <h1 className="mb-2 text-center text-3xl font-bold">CareCircle Plans</h1>
           <p className="mb-10 text-center text-slate-600">
-            Simple plans. Cancel anytime. Test cards only — powered by Stripe Checkout.
+            Simple plans. Cancel anytime. Test cards only â€” powered by Stripe Checkout.
           </p>
 
           <div className="grid gap-6 md:grid-cols-3">
@@ -201,7 +201,7 @@ export default function PricingPage() {
                       ))}
                     </ul>
                     <p className="mt-3 text-xs text-slate-500">
-                      * Parental device controls require setup on the kid’s device and your OK.
+                      * Parental device controls require setup on the kidâ€™s device and your OK.
                     </p>
                   </div>
 
@@ -218,7 +218,7 @@ export default function PricingPage() {
           </div>
 
           <section id="features" className="mt-16">
-            <h3 className="text-center text-lg font-semibold">What’s in each plan</h3>
+            <h3 className="text-center text-lg font-semibold">Whatâ€™s in each plan</h3>
             <p className="mt-1 text-center text-slate-600">
               Feature bullets above are clickable when that part of the app exists.
             </p>
@@ -242,3 +242,4 @@ export default function PricingPage() {
     </>
   );
 }
+

@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import { Container } from "@/components/container";
 
 export const metadata = {
@@ -21,3 +21,4 @@ export default function Page() {
     </Container>
   );
 }
+

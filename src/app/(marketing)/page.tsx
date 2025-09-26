@@ -1,23 +1,32 @@
-export default function Landing() {
-  const Section = (p: { id: string; title: string; children: React.ReactNode }) => (
-    <section id={p.id} className="mx-auto max-w-6xl px-6 py-12">
-      <h2 className="text-2xl font-semibold">{p.title}</h2>
-      <div className="mt-4 grid gap-4 rounded border p-4">{p.children}</div>
+﻿import type { ReactNode } from "react";
+
+// Simple section + key/value line helpers
+function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
+  return (
+    <section id={id} className="mx-auto max-w-6xl px-6 py-12">
+      <h2 className="text-2xl font-semibold">{title}</h2>
+      <div className="mt-4 grid gap-4 rounded border p-4">{children}</div>
     </section>
   );
+}
 
-  const Line = (p: { k: string; v: string }) => (
+function Line({ k, v }: { k: string; v: string }) {
+  return (
     <div className="flex items-start gap-2">
-      <div className="w-40 shrink-0 text-sm text-gray-600">{p.k}</div>
-      <div className="text-sm">{p.v}</div>
+      <div className="w-40 shrink-0 text-sm text-gray-600">{k}</div>
+      <div className="text-sm">{v}</div>
     </div>
   );
+}
 
+export default function Landing() {
   return (
     <main className="min-h-dvh">
       <header className="mx-auto max-w-6xl px-6 py-10">
         <h1 className="text-3xl font-bold">CareCircle — Family-Only Care OS</h1>
-        <p className="mt-2 text-gray-600">Calendar • ADL Tasks • MAR • Vault • Budgets • Chat • Roles • Devices</p>
+        <p className="mt-2 text-gray-600">
+          Calendar • ADL Tasks • MAR • Vault • Budgets • Chat • Roles • Devices
+        </p>
         <div className="mt-4 flex gap-3">
           <a href="#calendar" className="rounded bg-black px-4 py-2 text-white">See Features</a>
           <a href="/app" className="rounded border px-4 py-2">Open App</a>
@@ -68,7 +77,10 @@ export default function Landing() {
 
       <Section id="devices" title="Box 8 — Device Telemetry & Parental Controls (Optional)">
         <Line k="Purpose" v="Geofences, policy checks, enforce actions." />
-        <Line k="Dropdowns" v="Device Kind • Auto/Manual • Auto-Action • Geofence Preset • Telemetry Type • Policy Keywords/Domains" />
+        <Line
+          k="Dropdowns"
+          v="Device Kind • Auto/Manual • Auto-Action • Geofence Preset • Telemetry Type • Policy Keywords/Domains"
+        />
         <Line k="API" v="GET/POST/DELETE /api/devices, POST /api/geofences, GET/POST /api/policy, POST /api/telemetry/events" />
       </Section>
 
@@ -84,3 +96,4 @@ export default function Landing() {
     </main>
   );
 }
+

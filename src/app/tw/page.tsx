@@ -1,8 +1,8 @@
-export default function Page() {
+﻿export default function Page() {
   return (
     <main className="min-h-screen grid place-items-center p-10">
       <div className="p-8 rounded-2xl bg-lime-300 text-black shadow">
-        Tailwind is working 🎉
+        Tailwind is working ðŸŽ‰
       </div>
       <div className="mt-6 flex gap-2">
         <span className="px-3 py-1 rounded-full bg-blue-600 text-white">px-3</span>
@@ -12,3 +12,4 @@ export default function Page() {
     </main>
   );
 }
+

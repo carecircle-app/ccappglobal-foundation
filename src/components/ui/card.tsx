@@ -1,14 +1,25 @@
-// src/components/ui/Card.tsx
-import type { ReactNode } from "react";
+import Card, {
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  CardFooter,
+} from "@/components/ui/Card";
 
-type Props = { children: ReactNode; className?: string };
-
-// Reusable, server-friendly Card wrapper
-export default function Card({ children, className = "" }: Props) {
+export default function Example() {
   return (
-    <section className={`rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 shadow-sm ${className}`}>
-      {children}
-    </section>
+    <Card>
+      <CardHeader>
+        <CardTitle>Kids</CardTitle>
+        <CardDescription>Manage profiles and quick actions</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {/* your content */}
+      </CardContent>
+      <CardFooter>
+        {/* actions */}
+      </CardFooter>
+    </Card>
   );
 }
 

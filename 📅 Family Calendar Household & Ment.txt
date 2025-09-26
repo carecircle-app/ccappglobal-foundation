@@ -1,0 +1,179 @@
+📅 Family Calendar Household & Mental Load (Shared Care)                     
+–
+What it is
+One big family calendar everyone can see.
+Chores, shopping lists, budgets, school deadlines.
+Why it helps
+No more “oops, we forgot!” Everyone knows when and where.
+Less chaos. Clear “Today’s 3” to focus on.
+
+How it works
+
+Make an event ➜ task ➜ add repeat (daily/weekly).
+Admin ➜ Household ➜ “New List.”
+Assign items/task to people; add due dates.
+Add reminders (10/30/60 mins).
+Make lists (groceries, to-dos).
+Snap receipt photos; simple budgets.
+
+Setup (quick)
+
+Tiny picture
+[Mom]----\
+[Dad]----- > 📅 One calendar
+[Kids]---/
+Open in Admin → Calendar
+
+
+
+                          
+
+
+✅ Smart Tasks & (Daily Routines)
+🛡️ Security, Sharing & Parental Controls
+–
+What it is
+Chore lists & care routines (morning, meals, homework, hygiene, sleep).
+Who sees what + gentle device controls (parents only).
+
+Why it helps
+Kids know what to do. Parents see what’s done. Less nagging. 🙂
+Safety + privacy + calm ways to guide kids.
+
+How it works
+Roles: Owner/Parent-Choose Child 👦
+Make a task ➜ due time ➜ assign to kid(s).✅ from the dropdowns.
+For little kids: photo proof + “I did it!” button.
+Parental Enforce: lock screen, pause internet, loud alert.
+If they forget ➜ gentle nudges, then SMS.
+(Optional) Parent can pause phone/computer until finished.
+
+Setup (quick)
+Admin ➜  Members role ➜Tasks ➜ choose user.
+Pick ADL template (Morning/Meals/…) or make your own.
+Toggle Photo proof / SMS alerts / Auto-pause. Save.
+For device controls: Devices ➜ add IP + Port
+
+Tiny picture
+🪥 Brush → ✅
+🍽️ Dishes → ✅
+📚 Homework → (nudge) → ✅
+Open in Admin → Tasks
+
+
+
+
+
+📍 Geofencing, Devices & Alerts (Optional)
+–
+What it is
+“Places” that send alerts when someone arrives or leaves, plus optional device agent for gentle controls.
+
+Why it helps
+Peace of mind: “They got to school/home.” SOS when needed.
+
+How it works
+Add zones: Home 🏠 / School 🏫 / Park ⚽ / Store 🛒.
+Phone enters/exits ➜ push/SMS to guardians. Optional “Are you safe?” follow-up.
+Example: Kid leaves Home → alert. Arrives at School → alert. Leaves School early → alert.
+Device agent can receive pause/lock/alert requests.
+Setup (quick)
+Admin ➜ Geofences ➜ add name + map pin + circle size.
+Turn on SMS (parent phone in profile).
+Devices (optional): add device name + IP + Port (e.g., 8088) + Secret, then test Ping.
+To enforce: Admin ➜ Parental Enforce ➜ choose action.
+Tiny picture
+   🏫
+   |  "Arrived!"
+🏠-+
+   |  "Left!"
+  ⚽
+Open in Admin → Geofences
+Open in Admin → Devices
+Open in Admin → Parental Enforce
+
+
+
+
+
+📂 Visit Notes & Doc Vault
+–
+What it is
+A safe folder for doctor notes, school forms, IDs, photos.
+
+Why it helps
+Everything in one place when someone asks “do you have…?”
+
+How it works
+Upload files (photo/PDF).
+Tag with person + type (IEP, shot record, etc.).
+Search by name/date/tag.
+Setup (quick)
+Admin ➜ Vault ➜ “Upload.”
+Add title + tags.
+Choose who can see (Family / Relatives / Caregivers / Custom).
+Tiny picture
+[IEP.pdf] [InsuranceCard.jpg] [DoctorNote.pdf]
+Open in Admin → Vault
+
+
+💊Healthcare,  Meds & MAR (Medication Log)
+
+Caregiver 👩 
+
+What it is
+Medicine list + when to take + simple “given” log (MAR).
+
+Why it helps
+Fewer misses. Easy hand-offs between parents/caregivers.
+
+How it works
+Add med ➜ dose, time(s), who is responsible.
+At time: mark Given / Skipped / Later (add notes/photo).
+Export MAR PDF for doctor/school.
+Setup (quick)
+Admin ➜ Meds ➜ “Add Medication.”
+Fill name/dose/times + person.
+Use MAR tab to mark each dose.
+Tiny picture
+8:00  💊 Amox 5ml  → ✅ Given by Dad
+14:00 💊 Amox 5ml  → ⏳ Later
+Open in Admin → Meds & MAR
+Open in Admin → Health
+Open in Admin → Diabetes
+Open in Admin → Reports
+
+
+
+💬 Family Chat & Check-ins
+–
+What it is
+Private chat only for your circle, with optional short live video.
+
+Why it helps
+Fast updates (“We’re leaving now!”), share photos/files, no outsiders.
+
+How it works
+1:1 or group chat.
+Drop photos/notes.
+Optional short livestream for quick check-ins.
+Open in Admin → Chat
+Open in Admin → Live check-in
+
+
+current admin functionalities is only for ✅ Smart Tasks & (Daily Routines)
+🛡️ Security, Sharing & Parental Controls  remove it all from other boxes  but open the admin route to add future functionalities for each boxes.  All appropriate clickable features should be retaied to be routed to appropriate admin features.  All boxes should have a return to home feature.  boxes tailwinds and functionality (plus sign) to hide or collapse should be retained. All layout 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
